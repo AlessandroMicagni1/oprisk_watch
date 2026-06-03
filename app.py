@@ -87,8 +87,8 @@ SOURCES: list[Source] = [
     # Replace PASTE_YOUR_FEED_ID with the feed from your EUR-Lex "My RSS feeds"
     # page (sign in -> expert search scoped to operational risk -> Create RSS).
     Source(
-        name="EUR-Lex – Operational-risk saved search",
-        url="https://eur-lex.europa.eu/EN/display-feed.rss?myRssId=PASTE_YOUR_FEED_ID",
+        name="EUR-Lex – opriskwatch",
+        url="https://eur-lex.europa.eu/EN/display-feed.rss?myRssId=zqe49Yk%2B610wdPmm3HZQO57V%2FleJq2HlrylFlkdb5jw%3D",
         region="EU",
     ),
 
