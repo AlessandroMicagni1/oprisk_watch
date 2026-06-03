@@ -107,14 +107,14 @@ SOURCES: list[Source] = [
     # app the listing page and let discover_feed_url() read the declared feed.
     Source(
         name="EIOPA – News",
-        url="https://www.eiopa.europa.eu/media/news_en",
-        kind="discover",
+        url="https://www.eiopa.europa.eu/node/4816/rss_en",
+        kind="rss",
         region="EU",
     ),
     Source(
         name="Riksbank – Notices & press releases",
-        url="https://www.riksbank.se/en-gb/press-and-published/notices-and-press-releases/",
-        kind="discover",
+        url="https://www.riksbank.se/en-gb/rss/press-releases/",
+        kind="rss",
         region="SE",
     ),
 ]
