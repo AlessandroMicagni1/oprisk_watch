@@ -26,6 +26,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional
 
+from urllib.parse import urljoin
+
 import feedparser
 import requests
 import streamlit as st
@@ -62,6 +64,7 @@ class Source:
 # EUR-Lex predefined feeds: https://eur-lex.europa.eu/content/help/my-eurlex/my-rss-feeds.html
 SOURCES: list[Source] = [
     # --- Sweden: Finansinspektionen --------------------------------------- #
+    # FI turns any listing page into a feed by appending "/rss".
     Source(
         name="FI – All published material",
         url="https://www.fi.se/en/published/all-published-material/rss",
@@ -72,50 +75,47 @@ SOURCES: list[Source] = [
         url="https://www.fi.se/sv/publicerat/forslag-nya-fffs/rss",
         region="SE",
     ),
-    Source(
-        name="FI – Reports / supervision",
-        url="https://www.fi.se/sv/publicerat/rapporter/rss",
-        region="SE",
-    ),
+    # Sanctions listing sits one level deeper than the section root.
     Source(
         name="FI – Sanctions & interventions",
-        url="https://www.fi.se/en/published/sanctions/rss",
+        url="https://www.fi.se/en/published/sanctions/financial-firms/rss",
         region="SE",
     ),
-    # --- Sweden: Riksbank (payments / stability context) ------------------ #
+    # (FI reports are already inside "All published material" — no separate feed.)
+
+    # --- EU: EUR-Lex ------------------------------------------------------ #
+    # Replace PASTE_YOUR_FEED_ID with the feed from your EUR-Lex "My RSS feeds"
+    # page (sign in -> expert search scoped to operational risk -> Create RSS).
     Source(
-        name="Riksbank – Press & published",
-        url="https://www.riksbank.se/en-gb/rss/press-and-published/",
-        region="SE",
-    ),
-    # --- EU: EUR-Lex predefined feeds ------------------------------------- #
-    # Predefined feed: latest legislation (Parliament & Council). Confirm/replace
-    # the exact predefined-feed URL from your EUR-Lex "My RSS feeds" page if needed.
-    Source(
-        name="EUR-Lex – Latest legislation",
-        url="https://eur-lex.europa.eu/EN/display-feed.rss?myRssId=eP9ezlXEFL%2Fa3GhmFOuJijQDB5Dvm4t9OEC%2FsdEzGHZ%2FQGI%2BFwbjlA%3D%3D",
+        name="EUR-Lex – Operational-risk saved search",
+        url="https://eur-lex.europa.eu/EN/display-feed.rss?myRssId=PASTE_YOUR_FEED_ID",
         region="EU",
     ),
-    # --- EU: where operational-risk regulation actually breaks ------------ #
-    Source(
-        name="EBA – News & press",
-        url="https://www.eba.europa.eu/rss.xml",
-        region="EU",
-    ),
-    Source(
-        name="ESMA – News",
-        url="https://www.esma.europa.eu/rss.xml",
-        region="EU",
-    ),
-    Source(
-        name="EIOPA – News",
-        url="https://www.eiopa.europa.eu/rss.xml",
-        region="EU",
-    ),
+
+    # --- EU: verified feed URLs ------------------------------------------- #
+    Source(name="EBA – News & press", url="https://www.eba.europa.eu/rss.xml", region="EU"),
+    Source(name="ESMA – News", url="https://www.esma.europa.eu/rss.xml", region="EU"),
+    # ECB Banking Supervision serves RSS at .html endpoints (not .xml).
     Source(
         name="ECB Banking Supervision – Press",
-        url="https://www.bankingsupervision.europa.eu/rss/pub.xml",
+        url="https://www.bankingsupervision.europa.eu/rss/press.html",
         region="EU",
+    ),
+
+    # --- Auto-discovered feeds (point at the section page; the app finds it) #
+    # EIOPA and Riksbank don't expose one clean news-feed URL, so we hand the
+    # app the listing page and let discover_feed_url() read the declared feed.
+    Source(
+        name="EIOPA – News",
+        url="https://www.eiopa.europa.eu/media/news_en",
+        kind="discover",
+        region="EU",
+    ),
+    Source(
+        name="Riksbank – Notices & press releases",
+        url="https://www.riksbank.se/en-gb/press-and-published/notices-and-press-releases/",
+        kind="discover",
+        region="SE",
     ),
 ]
 
@@ -265,6 +265,38 @@ def fetch_html(src_dict: dict) -> list[dict]:
     return items
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def discover_feed_url(page_url: str) -> Optional[str]:
+    """Given a section/listing page, find its declared RSS/Atom feed URL.
+
+    Reads <link rel="alternate" type="application/rss+xml"> first, then falls
+    back to any anchor that looks like a feed. Returns an absolute URL or None.
+    """
+    headers = {"User-Agent": USER_AGENT}
+    try:
+        resp = requests.get(page_url, headers=headers, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "html.parser")
+    except Exception:
+        return None
+
+    # 1) Declared feed link in the page <head>.
+    for link in soup.find_all("link", attrs={"rel": True}):
+        rel = " ".join(link.get("rel", [])).lower()
+        ltype = (link.get("type") or "").lower()
+        if "alternate" in rel and ("rss" in ltype or "atom" in ltype or "xml" in ltype):
+            href = link.get("href")
+            if href:
+                return urljoin(page_url, href)
+
+    # 2) Fallback: an anchor that points at something feed-shaped.
+    for a in soup.find_all("a", href=True):
+        if re.search(r"(/rss\b|/feed\b|\.xml$|\.rss$)", a["href"], re.I):
+            return urljoin(page_url, a["href"])
+
+    return None
+
+
 def collect(sources: list[Source], keywords: list[str], lookback_days: int):
     """Fetch all enabled sources, filter by keyword + date, dedupe, sort."""
     cutoff = dt.datetime.utcnow() - dt.timedelta(days=lookback_days)
@@ -274,7 +306,13 @@ def collect(sources: list[Source], keywords: list[str], lookback_days: int):
     for src in sources:
         if not src.enabled:
             continue
-        if src.kind == "rss":
+        if src.kind == "discover":
+            feed_url = discover_feed_url(src.url)
+            if feed_url:
+                results = fetch_rss(feed_url, src.name, src.region)
+            else:
+                results = [{"_error": f"{src.name}: no feed link found on {src.url}"}]
+        elif src.kind == "rss":
             results = fetch_rss(src.url, src.name, src.region)
         else:
             results = fetch_html(src.__dict__)
