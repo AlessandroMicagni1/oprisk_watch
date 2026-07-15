@@ -60,3 +60,34 @@ def content_hash(*parts: str) -> str:
 
 def now_iso() -> str:
     return dt.datetime.utcnow().isoformat(timespec="seconds")
+
+
+# CELEX descriptor letters → human document type.
+# CELEX layout: sector(1) + year(4) + descriptor(letters) + number.
+CELEX_TYPES = {
+    "R": "Regulation", "L": "Directive", "D": "Decision",
+    "F": "Framework Decision", "H": "Recommendation", "G": "Resolution",
+    "A": "Act/Opinion", "J": "Judgment", "O": "Guideline",
+    "C": "Notice/Communication", "M": "Merger Decision", "X": "Other",
+    "PC": "Commission proposal", "DC": "Commission communication",
+    "SC": "Staff working document", "JC": "Joint communication",
+}
+
+
+def celex_type(celex: str) -> str:
+    """Map a CELEX id to a readable document type. '' if not parseable."""
+    if not celex:
+        return ""
+    m = re.match(r"^\d(\d{4})([A-Z]+)\d", celex.strip())
+    if not m:
+        return ""
+    letters = m.group(2)
+    return CELEX_TYPES.get(letters) or CELEX_TYPES.get(letters[0]) or "EU legal act"
+
+
+def doc_type(row: dict) -> str:
+    """Document type for any item: CELEX-derived for legislation, else generic."""
+    t = celex_type(row.get("celex", ""))
+    if t:
+        return t
+    return "Legislation" if row.get("prefiltered") else "News / publication"

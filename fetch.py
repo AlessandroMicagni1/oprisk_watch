@@ -4,16 +4,40 @@ so it can run from the app OR from a scheduled job."""
 
 from __future__ import annotations
 
+import re
 import time
+
+from urllib.parse import urljoin
 
 import feedparser
 import requests
+from bs4 import BeautifulSoup
 
 from config import (EURLEX_PAGE, EURLEX_SPARQL, REQUEST_TIMEOUT, SPARQL_TIMEOUT,
                     USER_AGENT)
 from util import clean_text
 
 HEADERS = {"User-Agent": USER_AGENT}
+
+
+def discover_feed_url(page_url: str):
+    """Find a page's declared RSS/Atom feed. Returns (url, error)."""
+    try:
+        resp = requests.get(page_url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.content, "html.parser")
+    except Exception as exc:
+        return None, str(exc)
+    for link in soup.find_all("link", attrs={"rel": True}):
+        rel = " ".join(link.get("rel", [])).lower()
+        ltype = (link.get("type") or "").lower()
+        if "alternate" in rel and ("rss" in ltype or "atom" in ltype or "xml" in ltype):
+            if link.get("href"):
+                return urljoin(page_url, link["href"]), None
+    for a in soup.find_all("a", href=True):
+        if re.search(r"(/rss\b|/feed\b|\.xml$|\.rss$)", a["href"], re.I):
+            return urljoin(page_url, a["href"]), None
+    return None, "no feed link advertised on page"
 
 
 def _item(source, region, title, url, published, raw_summary, celex="", prefiltered=False):
@@ -125,7 +149,13 @@ def fetch_all(sources, eurlex_on, eurlex_terms, eurlex_year, eurlex_max):
     for src in sources:
         if not src.enabled:
             continue
-        got, err = fetch_rss(src.url, src.name, src.region)
+        feed_url, derr = src.url, None
+        if getattr(src, "kind", "rss") == "discover":
+            feed_url, derr = discover_feed_url(src.url)
+        if derr or not feed_url:
+            health[src.name] = {"ok": False, "error": derr or "no feed", "count": 0}
+            continue
+        got, err = fetch_rss(feed_url, src.name, src.region)
         health[src.name] = {"ok": err is None, "error": err, "count": len(got)}
         items.extend(got)
 

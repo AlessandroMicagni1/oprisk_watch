@@ -13,7 +13,7 @@ from fetch import fetch_all
 from sources import SOURCES
 from store import (get_items, get_meta, init_db, new_since, record_health,
                    record_run, set_meta, source_health, stats, upsert_items)
-from util import matched_keywords, now_iso
+from util import doc_type, matched_keywords, now_iso
 
 
 def _run_fetch(eurlex_on, eurlex_terms, eurlex_year, eurlex_max):
@@ -41,7 +41,8 @@ def render():
         st.header("View filters")
         lookback = st.slider("Look-back (days, agency news)", 7, 365,
                              DEFAULT_LOOKBACK_DAYS, 7)
-        regions = st.multiselect("Regions", ["EU", "SE"], default=["EU", "SE"])
+        regions = st.multiselect("Regions", ["EU", "SE", "NO", "DK", "FI"],
+                                 default=["EU", "SE", "NO", "DK", "FI"])
         names = [s.name for s in SOURCES] + ["EUR-Lex (legislation)"]
         chosen = st.multiselect("Sources", names, default=names)
         include_eurlex = "EUR-Lex (legislation)" in chosen
@@ -90,7 +91,18 @@ def render():
             r["_terms"] = terms
         if query and query.lower() not in f"{r['title']} {r['summary']}".lower():
             continue
+        r["_type"] = doc_type(r)
         shown.append(r)
+
+    # Document-type facet (built from what's currently in view).
+    all_types = sorted({r["_type"] for r in shown})
+    if all_types:
+        with st.sidebar:
+            st.divider()
+            st.subheader("Document type")
+            chosen_types = st.multiselect("Show types", all_types, default=all_types,
+                                          label_visibility="collapsed")
+        shown = [r for r in shown if r["_type"] in chosen_types]
 
     # "New since last visit"
     last_visit = get_meta("last_visit", "")
@@ -147,13 +159,24 @@ def render():
         badge = "🇸🇪 SE" if it["region"] == "SE" else "🇪🇺 EU"
         is_new = fresh_boundary and it["first_seen"] > fresh_boundary
         with st.container(border=True):
-            top = st.columns([0.72, 0.28])
+            top = st.columns([0.66, 0.34])
             title = ("🆕 " if is_new else "") + it["title"]
             top[0].markdown(f"### {title}")
+            type_line = f"`{it['_type']}`" if it.get("_type") else ""
             top[1].markdown(
                 f"<div style='text-align:right;color:#888'>{badge} · {date_str}<br>"
                 f"<b>{it['source']}</b></div>", unsafe_allow_html=True)
-            st.write(it["summary"])
+            if type_line:
+                top[1].markdown(f"<div style='text-align:right'>{type_line}</div>",
+                                unsafe_allow_html=True)
+            # For legislation, the raw summary is just "CELEX x. title" — skip it.
+            if not it["prefiltered"]:
+                st.write(it["summary"])
+            meta = []
+            if it["celex"]:
+                meta.append(f"CELEX **{it['celex']}**")
+            if meta:
+                st.caption(" · ".join(meta))
             if it["_terms"]:
                 st.markdown("**Matched:** " + " ".join(f"`{t}`" for t in it["_terms"][:6]))
             if it["url"]:

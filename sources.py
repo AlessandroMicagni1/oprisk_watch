@@ -8,8 +8,8 @@ from dataclasses import dataclass
 class Source:
     name: str
     url: str
-    region: str = "EU"          # "EU" or "SE"
-    kind: str = "rss"
+    region: str = "EU"          # "EU" or "SE" or "NO"/"DK"/"FI" (Nordics)
+    kind: str = "rss"           # "rss" or "discover" (find the feed on a page)
     enabled: bool = True
 
 
@@ -26,6 +26,19 @@ SOURCES = [
            "https://www.riksbank.se/en-gb/rss/press-releases/", "SE"),
     Source("Riksbank – Notices",
            "https://www.riksbank.se/en-gb/rss/notices/", "SE"),
+    # --- Norway: Finanstilsynet (verified feeds under /en/rss/...) -------- #
+    Source("Finanstilsynet NO – News",
+           "https://www.finanstilsynet.no/en/rss/news/", "NO"),
+    Source("Finanstilsynet NO – Circulars",
+           "https://www.finanstilsynet.no/en/rss/circulars/", "NO"),
+    # --- Other Nordics via auto-discovery (feed found on the listing page) - #
+    # If a page doesn't advertise a feed, it's skipped with a clean note.
+    Source("Finanssivalvonta FI – News",
+           "https://www.finanssivalvonta.fi/en/publications-and-press-releases/press-releases/",
+           "FI", kind="discover"),
+    Source("Finanstilsynet DK – News",
+           "https://www.finanstilsynet.dk/en/Nyheder-og-Presse/Pressemeddelelser",
+           "DK", kind="discover"),
     # --- EU agencies ------------------------------------------------------ #
     Source("EBA – News & press", "https://www.eba.europa.eu/rss.xml", "EU"),
     Source("ESMA – News", "https://www.esma.europa.eu/rss.xml", "EU"),
