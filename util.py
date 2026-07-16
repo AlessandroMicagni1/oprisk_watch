@@ -92,3 +92,67 @@ def doc_type(row: dict) -> str:
     if t:
         return t
     return "Legislation" if row.get("prefiltered") else "News / publication"
+
+
+_ACRONYMS = {
+    "EU", "EEA", "ICT", "AI", "AML", "CFT", "GDPR", "DORA", "NIS", "NIS2",
+    "ESRB", "EIOPA", "EBA", "ESMA", "ECB", "SSM", "SREP", "ICAAP", "CRR",
+    "CRD", "RTS", "ITS", "CTPP", "SOC", "P2R", "RWA", "IT", "EDIC", "CSC",
+    "US", "UK", "CFSP", "FI", "FFFS",
+}
+_FEED_NOISE = [
+    r"Anonymous \(not verified\)",
+    r"\b\w{3},\s*\d{2}/\d{2}/\d{4}\s*-\s*\d{1,2}:\d{2}",
+    r"\bDate\s*\d{2}/\d{2}/\d{4}",
+    r"News\s*&\s*Press",
+    r"Careers\b.*$",
+    r"Call for expression of interest\b.*$",
+]
+_ACT_TYPE_SENTENCE = {
+    "Regulation": "A binding EU regulation — directly applicable in all member states.",
+    "Directive": "An EU directive — member states must transpose it into national law.",
+    "Decision": "An EU decision — binding on those it is addressed to.",
+    "Framework Decision": "An EU framework decision.",
+    "Recommendation": "A non-binding EU recommendation.",
+    "Resolution": "A non-binding EU resolution.",
+    "Commission proposal": "A legislative proposal from the European Commission (not yet in force).",
+    "Commission communication": "A Commission communication setting out policy or plans (non-binding).",
+    "Staff working document": "A Commission staff working document — background/analysis, non-binding.",
+    "Joint communication": "A joint communication setting out policy (non-binding).",
+    "Notice/Communication": "An official EU notice or communication.",
+    "Guideline": "An EU guideline.",
+    "Act/Opinion": "An EU act or opinion.",
+    "Merger Decision": "A merger-control decision.",
+}
+def deshout(title: str) -> str:
+    small = {"a","an","the","and","or","of","to","for","in","on","with","from","by","at","as","into"}
+    out = []
+    for i, w in enumerate(title.split()):
+        core = re.sub(r"[^A-Za-z]", "", w)
+        if not core or not core.isupper():
+            out.append(w)
+        elif core.lower() in small and i != 0:
+            out.append(w.lower())
+        elif core in _ACRONYMS or "-" in w or len(core) < 3:
+            out.append(w)
+        else:
+            out.append(w.capitalize())
+    return " ".join(out)
+def clean_eurlex_title(title: str) -> str:
+    t = clean_text(title)
+    if "#" in t:
+        t = t.split("#")[0].strip()
+    t = re.sub(r"\s*\(Text with EEA relevance\)\s*$", "", t, flags=re.I)
+    return deshout(t).strip()
+def eurlex_summary(doc_type_label: str) -> str:
+    return _ACT_TYPE_SENTENCE.get(doc_type_label, "An EU legal act.")
+def clean_feed_summary(raw: str, title: str = "") -> str:
+    text = clean_text(raw).replace("\u200b", "")
+    for pat in _FEED_NOISE:
+        text = re.sub(pat, "", text, flags=re.I)
+    text = re.sub(r"\s+", " ", text).strip(" -–—|·:")
+    if title:
+        tnorm = re.sub(r"\s+", " ", clean_text(title)).strip()
+        if tnorm and text.lower().startswith(tnorm.lower()):
+            text = text[len(tnorm):].strip(" -–—|·:")
+    return short_summary(text)
