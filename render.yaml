@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: oprisk-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-api.txt && python fetch_job.py
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT

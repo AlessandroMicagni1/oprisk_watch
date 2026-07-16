@@ -34,11 +34,12 @@ SOURCES = [
     # --- Other Nordics via auto-discovery (feed found on the listing page) - #
     # If a page doesn't advertise a feed, it's skipped with a clean note.
     Source("Finanssivalvonta FI – News",
-           "https://www.finanssivalvonta.fi/en/publications-and-press-releases/press-releases/",
+           "https://www.finanssivalvonta.fi/en/publications-and-press-releases/news-releases/",
            "FI", kind="discover"),
+    # Denmark: listing URL not yet verified — disabled so it doesn't 404.
     Source("Finanstilsynet DK – News",
-           "https://www.finanstilsynet.dk/en/Nyheder-og-Presse/Pressemeddelelser",
-           "DK", kind="discover"),
+           "https://www.finanstilsynet.dk/",
+           "DK", kind="discover", enabled=False),
     # --- EU agencies ------------------------------------------------------ #
     Source("EBA – News & press", "https://www.eba.europa.eu/rss.xml", "EU"),
     Source("ESMA – News", "https://www.esma.europa.eu/rss.xml", "EU"),

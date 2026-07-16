@@ -29,13 +29,13 @@ EURLEX_QUERY_TERMS = [
     # ICT / cyber / technology
     "information and communication technology", "ict-related", "ict third",
     "ict risk", "ict service", "ict security", "ict provider",
-    "cyber", "cybersecurity", "network and information systems",
+    "cyber resilience", "cybersecurity", "network and information systems",
     "penetration testing", "threat-led", "data breach", "critical infrastructure",
     # third parties / outsourcing / concentration
-    "outsourcing", "third-party", "third party", "critical third", "cloud",
+    "outsourcing", "third-party",  "critical third", "cloud",
     # financial crime / conduct
     "money laundering", "terrorist financing", "terrorism financing",
-    "sanction", "fraud", "payment fraud", "market abuse",
+     "payment fraud", "payment fraud", "market abuse",
     # prudential capital / governance for operational risk
     "own funds", "business indicator", "internal governance", "internal control",
     "risk management framework", "model risk",
@@ -50,9 +50,9 @@ DEFAULT_KEYWORDS = [
     "operational resilience", "operativ motståndskraft", "beredskap",
     "DORA", "ICT", "IKT", "third-party", "tredjepart", "outsourcing", "utlagd",
     "CRR3", "CRD6", "business indicator", "ICAAP", "SREP",
-    "incident", "incidentrapportering", "cyber", "cybersäkerhet",
+    "incident", "incidentrapportering", "cyber resilience", "cybersäkerhet",
     "resilience", "business continuity", "kontinuitet",
-    "fraud", "bedrägeri", "AML", "penningtvätt", "sanction", "sanktion",
+    "payment fraud", "bedrägeri", "AML", "penningtvätt",  "sanktion",
     "payment fraud", "betalningsbedrägeri", "Basel", "own funds", "RWA",
     "model risk", "artificial intelligence",
 ]

@@ -83,6 +83,7 @@ SELECT DISTINCT ?celex ?title ?date WHERE {{
   ?expr cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG> .
   ?expr cdm:expression_title ?title .
   FILTER(?date >= "{since_year}-01-01"^^xsd:date)
+  FILTER(REGEX(STR(?celex), "^[35]"))
   FILTER({title_filter})
 }}
 ORDER BY DESC(?date)

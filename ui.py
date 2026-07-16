@@ -7,6 +7,7 @@ import datetime as dt
 
 import streamlit as st
 
+import theme
 from config import (DEFAULT_KEYWORDS, DEFAULT_LOOKBACK_DAYS, EURLEX_DEFAULT_MAX,
                     EURLEX_DEFAULT_YEAR, EURLEX_QUERY_TERMS)
 from fetch import fetch_all
@@ -31,10 +32,10 @@ def _run_fetch(eurlex_on, eurlex_terms, eurlex_year, eurlex_max):
 def render():
     st.set_page_config(page_title="OpRisk Watch", page_icon="📡", layout="wide")
     init_db()
+    theme.inject()
 
-    st.title("OpRisk Watch")
-    st.caption("EU & Swedish operational-risk regulation — agency news plus the "
-               "full EUR-Lex legislation database, stored and searchable.")
+    _db_head = stats()
+    theme.header(_db_head["total"], _db_head["last_run"])
 
     # ---------------- Sidebar ---------------- #
     with st.sidebar:
@@ -155,32 +156,8 @@ def render():
 
     fresh_boundary = last_visit
     for it in shown:
-        date_str = it["published"] or "undated"
-        badge = "🇸🇪 SE" if it["region"] == "SE" else "🇪🇺 EU"
-        is_new = fresh_boundary and it["first_seen"] > fresh_boundary
-        with st.container(border=True):
-            top = st.columns([0.66, 0.34])
-            title = ("🆕 " if is_new else "") + it["title"]
-            top[0].markdown(f"### {title}")
-            type_line = f"`{it['_type']}`" if it.get("_type") else ""
-            top[1].markdown(
-                f"<div style='text-align:right;color:#888'>{badge} · {date_str}<br>"
-                f"<b>{it['source']}</b></div>", unsafe_allow_html=True)
-            if type_line:
-                top[1].markdown(f"<div style='text-align:right'>{type_line}</div>",
-                                unsafe_allow_html=True)
-            # For legislation, the raw summary is just "CELEX x. title" — skip it.
-            if not it["prefiltered"]:
-                st.write(it["summary"])
-            meta = []
-            if it["celex"]:
-                meta.append(f"CELEX **{it['celex']}**")
-            if meta:
-                st.caption(" · ".join(meta))
-            if it["_terms"]:
-                st.markdown("**Matched:** " + " ".join(f"`{t}`" for t in it["_terms"][:6]))
-            if it["url"]:
-                st.markdown(f"[↗ Open primary source]({it['url']})")
+        it["_is_new"] = bool(fresh_boundary and it["first_seen"] > fresh_boundary)
+        theme.render_card(it)
 
     # Record this visit AFTER rendering, so "new" reflects the *previous* visit.
     set_meta("last_visit", now_iso())
