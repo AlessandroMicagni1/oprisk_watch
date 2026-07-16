@@ -48,9 +48,20 @@ def iso_date(value) -> str:
     return d.strftime("%Y-%m-%d") if d else ""
 
 
-def matched_keywords(text: str, keywords: list[str]) -> list[str]:
-    low = text.lower()
-    return [kw for kw in keywords if kw.lower() in low]
+def matched_keywords(text, keywords):
+    low=text.lower(); hits=[]
+    for kw in keywords:
+        k=kw.lower()
+        if len(kw)<=4 or kw.isupper():
+            if re.search(r""+re.escape(k)+r"", low): hits.append(kw)
+        elif k in low: hits.append(kw)
+    return hits
+
+_EXCLUDE=[re.compile(p) for p in [r"inflation",r"monetary policy",r"policy rate",r"interest rate",r"unemployment",r"gdp",r"moldova",r"ukraine",r"enlargement",r"accession",r"western balkans",r"skills coalition",r"traineeship",r"trainees?",r"call for expression of interest"]]
+
+def is_excluded(text):
+    low=(text or '').lower()
+    return any(p.search(low) for p in _EXCLUDE)
 
 
 def content_hash(*parts: str) -> str:

@@ -76,6 +76,8 @@ def _query(region, source, doc_type, q, since_days, include_eurlex):
         s = _serialize(r, DEFAULT_KEYWORDS, last_visit)
         if not r["prefiltered"] and not s["terms"]:
             continue
+        if util.is_excluded(f"{s['title']} {s['summary'] or ''}"):
+            continue
         if ql and ql not in f"{s['title']} {s['summary'] or ''}".lower():
             continue
         if doc_type and s["docType"] not in doc_type:
@@ -148,3 +150,61 @@ def refresh(eurlex: bool = True,
 def mark_read():
     store.set_meta("last_visit", util.now_iso())
     return {"ok": True}
+
+
+def _export_rows(region, source, type, q, since_days, include_eurlex, limit):
+    items = _query(region, source, type, q, since_days, include_eurlex)
+    return items[: limit or len(items)]
+
+
+@app.get("/export.csv")
+def export_csv(region=Query(None), source=Query(None), type=Query(None), q: str = "",
+               since_days: int = DEFAULT_LOOKBACK_DAYS, include_eurlex: bool = True, limit: int = 500):
+    import csv, io
+    from fastapi.responses import StreamingResponse
+    rows = _export_rows(region, source, type, q, since_days, include_eurlex, limit)
+    buf = io.StringIO(); w = csv.writer(buf)
+    w.writerow(["Date","Region","Type","Source","Title","Summary","CELEX","URL"])
+    for it in rows:
+        w.writerow([it["published"] or "", it["region"], it["docType"], it["source"],
+                    it["title"], it["summary"] or "", it["celex"] or "", it["url"] or ""])
+    buf.seek(0)
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=oprisk-watch.csv"})
+
+
+@app.get("/export.pdf")
+def export_pdf(region=Query(None), source=Query(None), type=Query(None), q: str = "",
+               since_days: int = DEFAULT_LOOKBACK_DAYS, include_eurlex: bool = True, limit: int = 100):
+    import io
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, HRFlowable
+    rows = _export_rows(region, source, type, q, since_days, include_eurlex, limit)
+    C = colors.HexColor("#8f2d3b"); INK = colors.HexColor("#1a2233"); M = colors.HexColor("#6b7686")
+    ss = getSampleStyleSheet()
+    h = ParagraphStyle("t", parent=ss["Title"], textColor=C, fontSize=20, spaceAfter=2)
+    sub = ParagraphStyle("s", parent=ss["Normal"], textColor=M, fontSize=9, spaceAfter=10)
+    meta = ParagraphStyle("m", parent=ss["Normal"], textColor=M, fontSize=8, spaceAfter=1)
+    ttl = ParagraphStyle("i", parent=ss["Normal"], textColor=INK, fontSize=11, leading=14, spaceAfter=2, fontName="Helvetica-Bold")
+    body = ParagraphStyle("b", parent=ss["Normal"], textColor=INK, fontSize=9, leading=12, spaceAfter=3)
+    lk = ParagraphStyle("l", parent=ss["Normal"], textColor=C, fontSize=8, spaceAfter=12)
+    def esc(x): return (x or "").replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    story = [Paragraph("OpRisk Watch — Regulatory Brief", h),
+             Paragraph("EU &amp; Nordic operational-risk regulation · generated " + util.now_iso() + " UTC · " + str(len(rows)) + " items", sub),
+             HRFlowable(width="100%", thickness=1.4, color=C, spaceAfter=10)]
+    for it in rows:
+        story.append(Paragraph(it["docType"] + " · " + it["region"] + " · " + (it["published"] or "undated") + " · " + esc(it["source"]), meta))
+        story.append(Paragraph(esc(it["title"]), ttl))
+        if it["summary"]: story.append(Paragraph(esc(it["summary"]), body))
+        tail = (("CELEX " + it["celex"] + " · ") if it["celex"] else "") + esc(it["url"] or "")
+        story.append(Paragraph(tail, lk))
+    buf = io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, topMargin=18*mm, bottomMargin=18*mm,
+                      leftMargin=18*mm, rightMargin=18*mm).build(story)
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=oprisk-watch-brief.pdf"})
