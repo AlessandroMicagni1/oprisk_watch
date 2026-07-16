@@ -7,7 +7,8 @@ import json
 import sqlite3
 
 from config import DB_PATH
-from util import content_hash, iso_date, now_iso, short_summary
+from util import (clean_eurlex_title, clean_feed_summary, content_hash, doc_type,
+                 eurlex_summary, iso_date, now_iso, short_summary)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -69,7 +70,15 @@ def upsert_items(items) -> int:
             uid = it.get("celex") or it.get("url") or it.get("title")
             if not uid:
                 continue
-            chash = content_hash(it.get("title", ""), it.get("raw_summary", ""))
+            prefiltered = 1 if it.get("prefiltered") else 0
+            celex = it.get("celex", "")
+            title = it.get("title", "")
+            if prefiltered:
+                title = clean_eurlex_title(title)
+                summary = eurlex_summary(doc_type({"celex": celex, "prefiltered": True}))
+            else:
+                summary = clean_feed_summary(it.get("raw_summary", ""), title)
+            chash = content_hash(title, it.get("raw_summary", ""))
             row = conn.execute("SELECT uid FROM items WHERE uid = ?", (uid,)).fetchone()
             if row is None:
                 conn.execute(
@@ -78,11 +87,11 @@ def upsert_items(items) -> int:
                        first_seen, last_fetched)
                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (uid, it.get("source", ""), it.get("region", ""),
-                     it.get("celex", ""), it.get("title", ""), it.get("url", ""),
+                     celex, title, it.get("url", ""),
                      iso_date(it.get("published")),
-                     short_summary(it.get("raw_summary", "")),
+                     summary,
                      it.get("raw_summary", ""),
-                     1 if it.get("prefiltered") else 0,
+                     prefiltered,
                      chash, stamp, stamp),
                 )
                 new_count += 1

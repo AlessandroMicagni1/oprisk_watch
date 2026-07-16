@@ -55,7 +55,7 @@ def _serialize(r: dict, keywords: list[str], last_visit: str) -> dict:
         "title": r["title"],
         "url": r["url"],
         "published": r["published"] or None,
-        "summary": None if r["prefiltered"] else r["summary"],
+        "summary": r["summary"],
         "celex": r["celex"] or None,
         "docType": util.doc_type(r),
         "isNew": bool(last_visit and r["first_seen"] > last_visit),

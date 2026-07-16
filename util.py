@@ -69,6 +69,7 @@ CELEX_TYPES = {
     "F": "Framework Decision", "H": "Recommendation", "G": "Resolution",
     "A": "Act/Opinion", "J": "Judgment", "O": "Guideline",
     "C": "Notice/Communication", "M": "Merger Decision", "X": "Other",
+    "Y": "Notice/Communication",
     "PC": "Commission proposal", "DC": "Commission communication",
     "SC": "Staff working document", "JC": "Joint communication",
 }
