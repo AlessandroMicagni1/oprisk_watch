@@ -7,8 +7,8 @@ import json
 import sqlite3
 
 from config import DB_PATH
-from util import (clean_eurlex_title, clean_feed_summary, content_hash, doc_type,
-                 eurlex_summary, iso_date, now_iso, short_summary)
+from util import (clean_eurlex_title, clean_feed_summary, content_hash, describe_eurlex,
+                 doc_type, eurlex_summary, iso_date, now_iso, short_summary)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -59,6 +59,9 @@ def connect():
 def init_db():
     with connect() as conn:
         conn.executescript(SCHEMA)
+        cols = [r["name"] for r in conn.execute("PRAGMA table_info(items)")]
+        if "enriched" not in cols:
+            conn.execute("ALTER TABLE items ADD COLUMN enriched INTEGER DEFAULT 0")
 
 
 def upsert_items(items) -> int:
@@ -75,7 +78,7 @@ def upsert_items(items) -> int:
             title = it.get("title", "")
             if prefiltered:
                 title = clean_eurlex_title(title)
-                summary = eurlex_summary(doc_type({"celex": celex, "prefiltered": True}))
+                summary = describe_eurlex(title, doc_type({"celex": celex, "prefiltered": True}))
             else:
                 summary = clean_feed_summary(it.get("raw_summary", ""), title)
             chash = content_hash(title, it.get("raw_summary", ""))
@@ -198,3 +201,22 @@ def get_by_uid(uid: str):
     with connect() as conn:
         r = conn.execute("SELECT * FROM items WHERE uid = ?", (uid,)).fetchone()
         return dict(r) if r else None
+
+
+def unenriched_eurlex(limit: int):
+    """EUR-Lex items whose real full text hasn't been fetched yet (newest first)."""
+    with connect() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT uid, celex FROM items WHERE prefiltered = 1 AND celex != '' "
+            "AND COALESCE(enriched, 0) = 0 ORDER BY published DESC LIMIT ?",
+            (limit,)).fetchall()]
+
+
+def set_enriched(uid: str, summary: str | None = None):
+    """Mark an item enriched; update its summary if real text was fetched."""
+    with connect() as conn:
+        if summary:
+            conn.execute("UPDATE items SET summary = ?, enriched = 1 WHERE uid = ?",
+                         (summary, uid))
+        else:
+            conn.execute("UPDATE items SET enriched = 1 WHERE uid = ?", (uid,))

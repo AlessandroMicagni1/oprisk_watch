@@ -48,20 +48,43 @@ def iso_date(value) -> str:
     return d.strftime("%Y-%m-%d") if d else ""
 
 
-def matched_keywords(text, keywords):
-    low=text.lower(); hits=[]
+def matched_keywords(text: str, keywords: list[str]) -> list[str]:
+    """Match keywords in text. Short/acronym terms (<=4 chars or ALL-CAPS) must
+    match as whole words, so 'RWA' doesn't match 'Norway' and 'AI' doesn't match
+    'maintain'. Longer descriptive terms match as substrings (so 'cyber' still
+    hits 'cybersecurity')."""
+    low = text.lower()
+    hits = []
     for kw in keywords:
-        k=kw.lower()
-        if len(kw)<=4 or kw.isupper():
-            if re.search(r""+re.escape(k)+r"", low): hits.append(kw)
-        elif k in low: hits.append(kw)
+        k = kw.lower()
+        if len(kw) <= 4 or kw.isupper():
+            if re.search(r"\b" + re.escape(k) + r"\b", low):
+                hits.append(kw)
+        elif k in low:
+            hits.append(kw)
     return hits
 
-_EXCLUDE=[re.compile(p) for p in [r"inflation",r"monetary policy",r"policy rate",r"interest rate",r"unemployment",r"gdp",r"moldova",r"ukraine",r"enlargement",r"accession",r"western balkans",r"skills coalition",r"traineeship",r"trainees?",r"call for expression of interest"]]
 
-def is_excluded(text):
-    low=(text or '').lower()
-    return any(p.search(low) for p in _EXCLUDE)
+# Off-topic signals — items whose title/summary hit these are dropped as not
+# operational-risk-in-finance. Balanced: excludes clear macro/foreign-policy/
+# institution-building noise, keeps adjacent supervisory/resilience topics.
+_EXCLUDE_PATTERNS = [re.compile(p) for p in [
+    # monetary policy / macroeconomic commentary
+    r"\binflation\b", r"\bmonetary policy\b", r"\bpolicy rate\b",
+    r"\binterest rate\b", r"\bunemployment\b", r"\bgdp\b",
+    # foreign policy / geographic aid / enlargement
+    r"\bmoldova\b", r"\bukraine\b", r"\benlargement\b", r"\baccession\b",
+    r"\bwestern balkans\b",
+    # EU institution / skills building (not firm-facing regulation)
+    r"\bskills coalition\b", r"\btraineeship\b", r"\btrainees?\b",
+    r"\bcall for expression of interest\b",
+]]
+
+
+def is_excluded(text: str) -> bool:
+    """True if the item is off-topic for operational risk in finance."""
+    low = (text or "").lower()
+    return any(p.search(low) for p in _EXCLUDE_PATTERNS)
 
 
 def content_hash(*parts: str) -> str:
@@ -105,20 +128,30 @@ def doc_type(row: dict) -> str:
     return "Legislation" if row.get("prefiltered") else "News / publication"
 
 
+# --------------------------------------------------------------------------- #
+# Summary cleaning (deterministic, no AI)
+# --------------------------------------------------------------------------- #
+
+# Acronyms to preserve when de-shouting ALL-CAPS titles.
 _ACRONYMS = {
     "EU", "EEA", "ICT", "AI", "AML", "CFT", "GDPR", "DORA", "NIS", "NIS2",
     "ESRB", "EIOPA", "EBA", "ESMA", "ECB", "SSM", "SREP", "ICAAP", "CRR",
     "CRD", "RTS", "ITS", "CTPP", "SOC", "P2R", "RWA", "IT", "EDIC", "CSC",
     "US", "UK", "CFSP", "FI", "FFFS",
 }
+
+# Boilerplate patterns that leak into RSS descriptions (author lines,
+# timestamps, careers/nav fragments). Removed before summarising.
 _FEED_NOISE = [
     r"Anonymous \(not verified\)",
-    r"\b\w{3},\s*\d{2}/\d{2}/\d{4}\s*-\s*\d{1,2}:\d{2}",
+    r"\b\w{3},\s*\d{2}/\d{2}/\d{4}\s*-\s*\d{1,2}:\d{2}",   # Thu, 07/09/2026 - 17:00
     r"\bDate\s*\d{2}/\d{2}/\d{4}",
     r"News\s*&\s*Press",
-    r"Careers\b.*$",
+    r"Careers\b.*$",                                        # careers + trailing nav
     r"Call for expression of interest\b.*$",
 ]
+
+# Plain-English one-liner describing what each instrument type *is*.
 _ACT_TYPE_SENTENCE = {
     "Regulation": "A binding EU regulation — directly applicable in all member states.",
     "Directive": "An EU directive — member states must transpose it into national law.",
@@ -135,29 +168,62 @@ _ACT_TYPE_SENTENCE = {
     "Act/Opinion": "An EU act or opinion.",
     "Merger Decision": "A merger-control decision.",
 }
+
+
 def deshout(title: str) -> str:
-    small = {"a","an","the","and","or","of","to","for","in","on","with","from","by","at","as","into"}
+    """Fix shouting titles. Title-cases ALL-CAPS words unless they're acronyms
+    or short joining words; leaves normal mixed-case words untouched."""
+    small = {"a", "an", "the", "and", "or", "of", "to", "for", "in", "on",
+             "with", "from", "by", "at", "as", "into"}
     out = []
     for i, w in enumerate(title.split()):
         core = re.sub(r"[^A-Za-z]", "", w)
         if not core or not core.isupper():
-            out.append(w)
+            out.append(w)                                  # not shouting
         elif core.lower() in small and i != 0:
-            out.append(w.lower())
+            out.append(w.lower())                          # joining word
         elif core in _ACRONYMS or "-" in w or len(core) < 3:
-            out.append(w)
+            out.append(w)                                  # acronym / compound
         else:
-            out.append(w.capitalize())
+            out.append(w.capitalize())                     # de-shout
     return " ".join(out)
+
+
 def clean_eurlex_title(title: str) -> str:
+    """Strip '#' case-markers, '(Text with EEA relevance)', and de-shout caps."""
     t = clean_text(title)
     if "#" in t:
         t = t.split("#")[0].strip()
     t = re.sub(r"\s*\(Text with EEA relevance\)\s*$", "", t, flags=re.I)
     return deshout(t).strip()
+
+
 def eurlex_summary(doc_type_label: str) -> str:
+    """Plain-English act-type sentence for a EUR-Lex legislation card."""
     return _ACT_TYPE_SENTENCE.get(doc_type_label, "An EU legal act.")
-def clean_feed_summary(raw: str, title: str = "") -> str:
+
+
+_SIGNAL = [
+    "operational", "resilience", "ict", "cyber", "risk", "incident", "outsourc",
+    "third-party", "third party", "fraud", "aml", "money laundering", "sanction",
+    "dora", "supervis", "report", "requirement", "framework", "control",
+    "governance", "capital", "own funds", "model", "continuity", "breach",
+    "penetration", "payment", "conduct", "settlement", "guideline", "consultation",
+]
+
+
+def _rank_sentences(sentences: list[str], max_n: int) -> list[str]:
+    """Pick the most op-risk-relevant sentences, preserving original order."""
+    scored = [(sum(t in s.lower() for t in _SIGNAL), i, s) for i, s in enumerate(sentences)]
+    top = sorted(scored, key=lambda x: (-x[0], x[1]))[:max_n]
+    top.sort(key=lambda x: x[1])
+    return [t[2] for t in top]
+
+
+def clean_feed_summary(raw: str, title: str = "", max_sentences: int = 5,
+                       max_chars: int = 750) -> str:
+    """Strip feed boilerplate, drop a leading duplicate title, keep the most
+    relevant sentences (up to max_sentences), capped at max_chars."""
     text = clean_text(raw).replace("\u200b", "")
     for pat in _FEED_NOISE:
         text = re.sub(pat, "", text, flags=re.I)
@@ -166,4 +232,28 @@ def clean_feed_summary(raw: str, title: str = "") -> str:
         tnorm = re.sub(r"\s+", " ", clean_text(title)).strip()
         if tnorm and text.lower().startswith(tnorm.lower()):
             text = text[len(tnorm):].strip(" -–—|·:")
-    return short_summary(text)
+    if not text:
+        return "(No summary provided — open the link for the full text.)"
+    sents = re.split(r"(?<=[.!?])\s+", text)
+    if len(sents) > max_sentences:
+        sents = _rank_sentences(sents, max_sentences)
+    out = " ".join(sents).strip()
+    if len(out) > max_chars:
+        out = out[:max_chars].rsplit(" ", 1)[0] + "…"
+    return out
+
+
+def describe_eurlex(title: str, doc_type_label: str) -> str:
+    """Title-derived description used until the real preamble text is fetched:
+    the act-type sentence plus what the act amends/supplements, if stated."""
+    out = [eurlex_summary(doc_type_label)]
+    m = re.search(
+        r"\b(supplement\w*|amend\w*|repeal\w*|implement\w*|correct\w*)\b\s+"
+        r"((?:Regulation|Directive|Decision)[^,.;]*)", title, re.I)
+    if m:
+        verb = {"supplementing": "supplements", "amending": "amends",
+                "repealing": "repeals", "implementing": "implements",
+                "correcting": "corrects"}.get(m.group(1).lower(), m.group(1).lower())
+        rel = re.sub(r"\s+", " ", m.group(2)).strip()
+        out.append(f"It {verb} {rel[:120]}.")
+    return " ".join(out)

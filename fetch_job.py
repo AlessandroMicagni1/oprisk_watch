@@ -4,8 +4,8 @@ schedule (cron / GitHub Actions) so the app never has to fetch live.
     python fetch_job.py
 """
 
-from config import EURLEX_DEFAULT_MAX, EURLEX_DEFAULT_YEAR, EURLEX_QUERY_TERMS
-from fetch import fetch_all
+from config import EURLEX_DEFAULT_MAX, EURLEX_DEFAULT_YEAR, EURLEX_QUERY_TERMS, EURLEX_TEXT_MAX
+from fetch import enrich_eurlex_batch, fetch_all
 from sources import SOURCES
 from store import init_db, record_health, record_run, stats, upsert_items
 
@@ -28,6 +28,10 @@ def run():
     for name, h in health.items():
         flag = "ok " if h["ok"] else "ERR"
         print(f"  [{flag}] {name}: {h['count']}" + (f" — {h['error']}" if h["error"] else ""))
+
+    print(f"Enriching up to {EURLEX_TEXT_MAX} EUR-Lex items with full text…")
+    enriched = enrich_eurlex_batch(EURLEX_TEXT_MAX)
+    print(f"  enriched {enriched} EUR-Lex items with real preamble text.")
 
 
 if __name__ == "__main__":

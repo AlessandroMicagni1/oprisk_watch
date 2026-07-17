@@ -137,12 +137,16 @@ def get_facets():
 def refresh(eurlex: bool = True,
             eurlex_year: int = EURLEX_DEFAULT_YEAR,
             eurlex_max: int = EURLEX_DEFAULT_MAX):
+    from fetch import enrich_eurlex_batch
     items, health, eurlex_info = fetch_all(
         SOURCES, eurlex, EURLEX_QUERY_TERMS, eurlex_year, eurlex_max)
     new = store.upsert_items(items)
     store.record_health(health)
+    # Small enrichment batch here (kept low so the HTTP request stays fast);
+    # the bulk enrichment happens in the build-time fetch job.
+    enriched = enrich_eurlex_batch(40)
     store.record_run(new, store.stats()["total"])
-    return {"new": new, "fetched": len(items),
+    return {"new": new, "fetched": len(items), "enriched": enriched,
             "eurlex": eurlex_info, "stats": store.stats(), "health": health}
 
 

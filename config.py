@@ -2,8 +2,9 @@
 both the app and the standalone fetch job."""
 
 from pathlib import Path
+import os
 
-USER_AGENT = "Cardinal-OpRisk-Monitor/0.2 (regulatory monitoring; ops@getcardinal.io)"
+USER_AGENT = "Cardinal-OpRisk-Monitor/0.3 (regulatory monitoring; ops@getcardinal.io)"
 REQUEST_TIMEOUT = 30           # seconds for a normal HTTP request
 SPARQL_TIMEOUT = 60            # EUR-Lex SPARQL can be slow
 DEFAULT_LOOKBACK_DAYS = 90
@@ -18,6 +19,9 @@ EURLEX_SPARQL = "https://publications.europa.eu/webapi/rdf/sparql"
 EURLEX_PAGE = 100              # rows per SPARQL request; we loop OFFSET to the max
 EURLEX_DEFAULT_YEAR = 2018
 EURLEX_DEFAULT_MAX = 1000
+# Max EUR-Lex documents to fetch full text for, per enrichment run. Bounds build
+# time; the backlog fills in across runs. Override with env EURLEX_TEXT_MAX.
+EURLEX_TEXT_MAX = int(os.getenv("EURLEX_TEXT_MAX", "400"))
 
 # Title phrases that filter EUR-Lex legislation. Multi-word / specific on purpose,
 # to avoid substring false positives ("ict" -> "predict", "ai" -> "maintenance").

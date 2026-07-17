@@ -48,6 +48,20 @@ def _item(source, region, title, url, published, raw_summary, celex="", prefilte
     }
 
 
+def _entry_text(e) -> str:
+    """Prefer the fullest text a feed entry offers (content > summary > description)."""
+    texts = []
+    for c in getattr(e, "content", []) or []:
+        v = c.get("value") if isinstance(c, dict) else getattr(c, "value", "")
+        if v:
+            texts.append(v)
+    for attr in ("summary", "description"):
+        v = getattr(e, attr, None)
+        if v:
+            texts.append(v)
+    return max(texts, key=len) if texts else ""
+
+
 def fetch_rss(url: str, name: str, region: str):
     """Return (items, error). error is None on success."""
     try:
@@ -64,7 +78,7 @@ def fetch_rss(url: str, name: str, region: str):
             title=clean_text(getattr(e, "title", "(untitled)")),
             url=getattr(e, "link", ""),
             published=getattr(e, "published", None) or getattr(e, "updated", None),
-            raw_summary=getattr(e, "summary", None) or getattr(e, "description", "") or "",
+            raw_summary=_entry_text(e),
         ))
     return items, None
 
@@ -83,6 +97,8 @@ SELECT DISTINCT ?celex ?title ?date WHERE {{
   ?expr cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG> .
   ?expr cdm:expression_title ?title .
   FILTER(?date >= "{since_year}-01-01"^^xsd:date)
+  # Legislation & preparatory acts only. CELEX sector 3 = legal acts,
+  # 5 = preparatory (proposals). Excludes 6 (case law), C-series notices, etc.
   FILTER(REGEX(STR(?celex), "^[35]"))
   FILTER({title_filter})
 }}
@@ -169,3 +185,62 @@ def fetch_all(sources, eurlex_on, eurlex_terms, eurlex_year, eurlex_max):
         items.extend(got)
 
     return items, health, eurlex_info
+
+
+# --------------------------------------------------------------------------- #
+# EUR-Lex full-text enrichment (deterministic, cached, bounded)
+# --------------------------------------------------------------------------- #
+
+_EURLEX_SKIP = (
+    "having regard", "acting in accordance", "after consulting",
+    "after transmission", "whereas", "have adopted", "has adopted",
+    "the european parliament", "the council of", "official journal",
+    "this regulation shall be binding", "done at ", "having consulted",
+)
+
+
+def fetch_eurlex_text(celex: str) -> str:
+    """Fetch a EUR-Lex act's HTML full text and extract the first few
+    substantive paragraphs (the operative purpose, past institutional
+    boilerplate). Returns '' on any failure — callers keep the fallback."""
+    if not celex:
+        return ""
+    url = f"https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX:{celex}"
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=15)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, "html.parser")
+    except Exception:
+        return ""
+    picks = []
+    for p in soup.find_all("p"):
+        t = clean_text(p.get_text(" "))
+        if len(t) < 80:
+            continue
+        low = t[:45].lower()
+        if any(s in low for s in _EURLEX_SKIP):
+            continue
+        picks.append(t)
+        if len(picks) >= 3:
+            break
+    text = " ".join(picks)
+    if len(text) > 900:
+        text = text[:900].rsplit(" ", 1)[0] + "…"
+    return text
+
+
+def enrich_eurlex_batch(limit: int) -> int:
+    """Fetch real text for up to `limit` not-yet-enriched EUR-Lex items and
+    store it as their summary. Best-effort: fetch failures keep the existing
+    title-derived summary and are retried on a later run."""
+    import store  # local import to avoid any import cycle at module load
+
+    rows = store.unenriched_eurlex(limit)
+    done = 0
+    for r in rows:
+        text = fetch_eurlex_text(r["celex"])
+        store.set_enriched(r["uid"], text or None)
+        if text:
+            done += 1
+        time.sleep(0.15)  # be polite to EUR-Lex
+    return done
