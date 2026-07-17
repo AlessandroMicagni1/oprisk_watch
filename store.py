@@ -192,3 +192,9 @@ def source_health() -> list[dict]:
     with connect() as conn:
         return [dict(r) for r in conn.execute(
             "SELECT * FROM sources ORDER BY name").fetchall()]
+
+
+def get_by_uid(uid: str):
+    with connect() as conn:
+        r = conn.execute("SELECT * FROM items WHERE uid = ?", (uid,)).fetchone()
+        return dict(r) if r else None

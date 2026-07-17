@@ -25,34 +25,70 @@ EURLEX_DEFAULT_MAX = 1000
 EURLEX_QUERY_TERMS = [
     # core operational risk / resilience
     "operational risk", "operational resilience", "digital operational resilience",
-    "business continuity", "operational continuity", "crisis management",
+    "business continuity", "operational continuity", "recovery and resolution",
     # ICT / cyber / technology
     "information and communication technology", "ict-related", "ict third",
     "ict risk", "ict service", "ict security", "ict provider",
     "cyber resilience", "cybersecurity", "network and information systems",
-    "penetration testing", "threat-led", "data breach", "critical infrastructure",
+    "penetration testing", "threat-led", "security of network",
     # third parties / outsourcing / concentration
-    "outsourcing", "third-party",  "critical third", "cloud",
+    "outsourcing", "third-party risk", "critical third", "cloud outsourcing",
+    "concentration risk",
     # financial crime / conduct
-    "money laundering", "terrorist financing", "terrorism financing",
-     "payment fraud", "payment fraud", "market abuse",
+    "anti-money laundering", "money laundering", "terrorist financing",
+    "market abuse", "market manipulation", "insider dealing",
+    "payment fraud", "fraud prevention", "strong customer authentication",
+    # execution / market infrastructure / settlement
+    "settlement discipline", "central counterparties", "central securities depositor",
     # prudential capital / governance for operational risk
-    "own funds", "business indicator", "internal governance", "internal control",
-    "risk management framework", "model risk",
-    # emerging
-    "artificial intelligence", "machine learning", "distributed ledger",
+    "own funds requirements", "business indicator", "internal governance",
+    "risk management framework", "model risk", "internal control", "remuneration",
+    # incident / reporting
+    "incident reporting", "major incident", "business disruption",
+    # data protection
+    "protection of personal data",
 ]
 
 # Keyword universe for filtering the RSS items (English + Swedish). EUR-Lex items
 # are pre-filtered by the SPARQL query, so they bypass this at view time.
 DEFAULT_KEYWORDS = [
+    # --- core operational risk / resilience ---
     "operational risk", "operativ risk", "operationell risk",
     "operational resilience", "operativ motståndskraft", "beredskap",
-    "DORA", "ICT", "IKT", "third-party", "tredjepart", "outsourcing", "utlagd",
-    "CRR3", "CRD6", "business indicator", "ICAAP", "SREP",
-    "incident", "incidentrapportering", "cyber resilience", "cybersäkerhet",
-    "resilience", "business continuity", "kontinuitet",
-    "payment fraud", "bedrägeri", "AML", "penningtvätt",  "sanktion",
-    "payment fraud", "betalningsbedrägeri", "Basel", "own funds", "RWA",
-    "model risk", "artificial intelligence",
+    "resilience", "business continuity", "kontinuitet", "contingency",
+    # --- Basel event type: internal & external fraud ---
+    "fraud", "bedrägeri", "external fraud", "internal fraud", "payment fraud",
+    "betalningsbedrägeri", "card fraud", "authorised push payment", "APP fraud",
+    "embezzlement", "misappropriation", "forgery", "rogue trading",
+    # --- Basel event type: clients, products & business practices / conduct ---
+    "conduct", "uppförande", "mis-selling", "market abuse", "marknadsmissbruk",
+    "market manipulation", "insider dealing", "fiduciary", "suitability",
+    # --- Basel event type: employment practices ---
+    "employment practices", "workplace safety", "discrimination", "whistleblow",
+    # --- Basel event type: damage to physical assets / disruption ---
+    "damage to physical assets", "business disruption", "system failure",
+    "system outage", "driftstörning", "IT failure", "service disruption",
+    # --- Basel event type: execution, delivery & process management ---
+    "execution", "settlement", "avveckling", "transaction processing",
+    "reconciliation", "data entry error", "process failure", "human error",
+    # --- ICT / cyber / technology ---
+    "DORA", "ICT", "IKT", "cyber", "cybersäkerhet", "cybersecurity",
+    "incident", "incidentrapportering", "information security", "informationssäkerhet",
+    "network and information systems", "NIS2", "penetration testing", "ransomware",
+    "data breach", "personuppgiftsincident", "cloud",
+    # --- third party / outsourcing / concentration ---
+    "third-party", "tredjepart", "outsourcing", "utlagd", "critical third",
+    "concentration risk", "koncentrationsrisk", "vendor", "supply chain",
+    # --- model risk / AI ---
+    "model risk", "modellrisk", "artificial intelligence", "machine learning",
+    "algorithm", "algoritm",
+    # --- financial crime ---
+    "AML", "penningtvätt", "anti-money laundering", "terrorist financing",
+    "finansiering av terrorism", "sanction", "sanktion", "KYC", "financial crime",
+    # --- prudential capital / governance for op risk ---
+    "CRR3", "CRD6", "business indicator", "ICAAP", "SREP", "own funds", "RWA",
+    "Basel", "pillar 2", "internal governance", "risk management framework",
+    "governance", "internal control", "internkontroll",
+    # --- data protection ---
+    "GDPR", "data protection", "dataskydd", "privacy breach",
 ]

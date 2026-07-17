@@ -1,0 +1,19 @@
+name: Daily data refresh
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger backend refresh
+        run: |
+          echo "Calling /refresh (cold start may take ~1 min)..."
+          curl -sS -X POST --max-time 600 https://oprisk-watch.onrender.com/refresh | head -c 600 || echo "call ended"
+      - name: Show resulting stats
+        run: |
+          sleep 5
+          curl -sS --max-time 120 https://oprisk-watch.onrender.com/stats || true
